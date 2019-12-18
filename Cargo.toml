@@ -1,0 +1,15 @@
+[package]
+name = "bytie"
+version = "0.1.0"
+authors = ["Armin Widegreen <armin.widegreen@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+clap = "2"
+failure = "*"
+log = "0.4"
+env_logger = "0.7"
+tempfile = "3.1"
+atty = "0.2"
+regex = "1"
+lazy_static = "1.4.0"
