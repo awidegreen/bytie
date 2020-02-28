@@ -100,7 +100,7 @@ This should be an integer, where -1 specifies then end of the file"##,
                 .arg(
                     Arg::with_name("position")
                         .help(
-                            r##"Specify a position/range the deletion shall be performed on.
+                            r##"Specify a position/range where the deletion shall be performed on.
 <begin>:<end>         Begin to end (inclusive), requires <end> > <begin>
 <begin>+<length>      Begin plus <length bytes>, requires <length> > 0
 <begin>               Begin to the end of input

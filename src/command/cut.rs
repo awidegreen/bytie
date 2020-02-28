@@ -101,21 +101,15 @@ mod tests {
     use crate::command::Command;
 
     #[test]
-    fn test_iterate_over_all() {
+    fn test_small_blocksize() {
         let mut cmd = CutCommand {
             position: "".to_string(),
         };
-        let input = r"Lorem ipsum dolor sit amet, consectetur adipiscing elit,
-            sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
-            nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in
-            reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
-            pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
-            culpa qui officia deserunt mollit anim id est laborum";
+        let input = "HalloWelt";
         let mut out: Vec<u8> = vec![];
 
-        for bs in vec![1, 2, 3, 4, 10, 32, 64] {
-            for start in 1..input.len() {
+        for bs in vec![1, 2, 3, 4, 10] {
+            for start in 0..=input.len() {
                 for end in start..input.len() {
                     let exp = &input[start..end + 1];
                     out.clear();
@@ -123,6 +117,34 @@ mod tests {
                     assert!(cmd.run(bs, &mut input.as_bytes(), &mut out, None).is_ok());
                     let out = std::str::from_utf8(&out).unwrap();
                     assert_eq!(exp, out);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_big_blocksize() {
+        let mut cmd = CutCommand {
+            position: "".to_string(),
+        };
+        let input = r##"Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+            sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+            nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in
+            reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+            pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
+            culpa qui officia deserunt mollit anim id est laborum"##;
+        let mut out: Vec<u8> = vec![];
+
+        for bs in vec![32, 64, 128, 512, 1024, 2048] {
+            for start in 0..=input.len() {
+                for end in start..input.len() {
+                    let exp = &input[start..end + 1];
+                    out.clear();
+                    cmd.position = format!("{}:{}", start, end);
+                    assert!(cmd.run(bs, &mut input.as_bytes(), &mut out, None).is_ok());
+                    let out = std::str::from_utf8(&out).unwrap();
+                    assert_eq!(exp, out, "bs: {}, start: {}, end: {}", bs, start, end);
                 }
             }
         }
