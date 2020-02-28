@@ -53,7 +53,7 @@ impl crate::command::Command for CutCommand {
             }
             total_read = total_read + n;
 
-            println!(
+            debug!(
                 "n: {} total_read: {}, begin: {}, end: {}, state: {:?}",
                 n, total_read, position.begin, end, state
             );
@@ -64,9 +64,8 @@ impl crate::command::Command for CutCommand {
                         State::Write
                     } else {
                         if total_read > end {
-                            let offset = (end % n) + 1;
-                            println!("In Write, n: {}, offset: {}", n, offset);
-                            out.write(&buffer[0..offset])?;
+                            let offset_end = (end - (total_read - n)) + 1;
+                            out.write(&buffer[0..offset_end])?;
                             break; // no need to read more
                         } else {
                             out.write(&buffer[0..n])?;
@@ -76,10 +75,9 @@ impl crate::command::Command for CutCommand {
                 }
                 State::Skip => {
                     if total_read > position.begin {
-                        let offset = position.begin % n;
-                        println!("In skip, offset: {}", offset);
+                        let offset = position.begin - (total_read - n);
                         if total_read > end && !cut_till_end {
-                            let offset_end = (end % n) + 1;
+                            let offset_end = (end - (total_read - n)) + 1;
                             out.write(&buffer[offset..offset_end])?;
                             break;
                         } else {
@@ -107,24 +105,24 @@ mod tests {
         let mut cmd = CutCommand {
             position: "".to_string(),
         };
-        let input = "foobar\n";
+        let input = r"Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+            sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+            nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in
+            reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+            pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
+            culpa qui officia deserunt mollit anim id est laborum";
         let mut out: Vec<u8> = vec![];
 
         for bs in vec![1, 2, 3, 4, 10, 32, 64] {
-            for start in 1..4 {
-                for end in start..6 {
-                    println!(
-                        "Run with bs: {}, start: {} end: {}, exp: {}",
-                        bs,
-                        start,
-                        end,
-                        &input[start..end + 1]
-                    );
+            for start in 1..input.len() {
+                for end in start..input.len() {
+                    let exp = &input[start..end + 1];
                     out.clear();
                     cmd.position = format!("{}:{}", start, end);
                     assert!(cmd.run(bs, &mut input.as_bytes(), &mut out, None).is_ok());
                     let out = std::str::from_utf8(&out).unwrap();
-                    assert_eq!(&input[start..end + 1], out);
+                    assert_eq!(exp, out);
                 }
             }
         }
