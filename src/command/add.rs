@@ -109,7 +109,7 @@ mod tests {
                 .take(len)
                 .collect();
 
-            for start in 0..input.len() + 1 {
+            for start in 0..=input.len() {
                 let len: usize = rng.gen_range(0, 40);
                 let text_to_insert: Vec<u8> = rng
                     .sample_iter(rand::distributions::Standard)
