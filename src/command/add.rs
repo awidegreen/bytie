@@ -1,13 +1,20 @@
 use clap::{value_t, ArgMatches};
 use failure::{bail, Error};
+use humanize_rs::bytes::Bytes;
 
 pub struct AddCommand {
-    begin: i64,
+    begin: usize,
     value: Option<Vec<u8>>,
 }
 impl AddCommand {
     pub fn from_matches(m: &ArgMatches) -> Result<Self, Error> {
-        let begin = value_t!(m, "begin", i64)?;
+        let begin = value_t!(m, "begin", String)?;
+        let begin = if begin == "-1" {
+            std::usize::MAX
+        } else {
+            begin.parse::<Bytes>()?.size()
+        };
+
         let value = if let Ok(value) = value_t!(m, "value", String) {
             Some(value.as_bytes().to_vec())
         } else {
@@ -26,12 +33,6 @@ impl crate::command::Command for AddCommand {
         out: &mut dyn std::io::Write,
         input: Option<&mut dyn std::io::Read>,
     ) -> Result<(), Error> {
-        let begin = if self.begin == -1 {
-            std::usize::MAX
-        } else {
-            self.begin as usize
-        };
-
         if self.value.is_none() && input.is_none() {
             bail!("Well, as no <VALUE> input parameter has been provided, some input should be provided by STDIN.")
         }
@@ -47,8 +48,8 @@ impl crate::command::Command for AddCommand {
                 break;
             }
             total_read = total_read + n;
-            if total_read > begin {
-                offset = begin - (total_read - n);
+            if total_read > self.begin {
+                offset = self.begin - (total_read - n);
                 out.write(&buffer[0..offset])?;
                 break;
             } else {
@@ -94,6 +95,22 @@ mod tests {
     use rand::{thread_rng, Rng};
 
     #[test]
+    fn test_add_to_end() {
+        let cmd = AddCommand {
+            begin: std::usize::MAX,
+            value: Some(vec![3, 4, 5]),
+        };
+        let input = vec![0, 1, 2];
+        let exp = vec![0, 1, 2, 3, 4, 5];
+
+        for bs in vec![1, 2, 3, 4, 10] {
+            let mut out: Vec<u8> = vec![];
+            assert!(cmd.run(bs, &mut input.as_slice(), &mut out, None).is_ok());
+            assert_eq!(exp, out);
+        }
+    }
+
+    #[test]
     fn test_small_blocksize() {
         let mut cmd = AddCommand {
             begin: 0,
@@ -120,7 +137,7 @@ mod tests {
                 exp.extend_from_slice(&text_to_insert);
                 exp.extend_from_slice(&input[start..]);
                 out.clear();
-                cmd.begin = start as i64;
+                cmd.begin = start;
                 cmd.value = Some(text_to_insert);
                 assert!(cmd.run(bs, &mut input.as_slice(), &mut out, None).is_ok());
                 assert_eq!(exp, out);
@@ -155,7 +172,7 @@ mod tests {
                 exp.extend_from_slice(&to_insert);
                 exp.extend_from_slice(&input[start..]);
                 out.clear();
-                cmd.begin = start as i64;
+                cmd.begin = start;
                 cmd.value = Some(to_insert);
                 assert!(cmd.run(bs, &mut input.as_slice(), &mut out, None).is_ok());
                 assert_eq!(exp, out);

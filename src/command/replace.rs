@@ -1,5 +1,6 @@
 use clap::{value_t, ArgMatches};
 use failure::{bail, Error};
+use humanize_rs::bytes::Bytes;
 
 pub struct ReplaceCommand {
     begin: usize,
@@ -7,7 +8,8 @@ pub struct ReplaceCommand {
 }
 impl ReplaceCommand {
     pub fn from_matches(m: &ArgMatches) -> Result<Self, Error> {
-        let begin = value_t!(m, "begin", usize)?;
+        let begin = value_t!(m, "begin", String)?;
+        let begin = begin.parse::<Bytes>()?.size();
         let value = if let Ok(value) = value_t!(m, "value", String) {
             Some(value.as_bytes().to_vec())
         } else {

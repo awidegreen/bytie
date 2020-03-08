@@ -1,6 +1,19 @@
 use crate::defs;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
+static POS_HELP: &str =
+    "Specifies a position and range/count for the operation, see POSITION section";
+static POS_HELP_SEC: &str = "POSITION:
+\tSpecify a position/range where the deletion shall be performed on.
+\t<begin>\t\t  Begin to the end of input
+\t<begin>:<end>\t  Begin to end (exclusive), requires <end> > <begin>
+\t\t\t  Example: 'foobar', 0:2 == 'fo' or 3:5 == 'ba'
+\t<begin>:=<end>\t  Begin to end (inclusive), requires <end> > <begin>
+\t\t\t  Example: 'foobar', 0:=2 == 'foo' or 3:=5 == 'bar'
+\t<begin>+<count>\t  Begin plus <count> (exclusive), requires <count> > 0.
+\t\t\t  The length includes the begin position: 0+10 is 10 bytes, from 0..9 (same as 0:9)
+";
+
 pub(crate) fn get_matches<'a>() -> ArgMatches<'a> {
     App::new(clap::crate_name!())
         .version(clap::crate_version!())
@@ -52,7 +65,7 @@ pub(crate) fn get_matches<'a>() -> ArgMatches<'a> {
                     Arg::with_name("begin")
                         .help(
                             r##"Specify where the data should be added.
-This should be an integer, where -1 specifies then end of the file"##,
+This should be an integer, where -1 specifies then end of the file/stream"##,
                         )
                         .allow_hyphen_values(true)
                         .takes_value(true)
@@ -94,15 +107,10 @@ This should be an integer, where -1 specifies then end of the file"##,
             SubCommand::with_name("delete")
                 .about("Delete/Remove bytes from file/input")
                 .visible_alias("remove")
+                .after_help(POS_HELP_SEC)
                 .arg(
                     Arg::with_name("position")
-                        .help(
-                            r##"Specify a position/range where the deletion shall be performed on.
-<begin>:<end>         Begin to end (inclusive), requires <end> > <begin>
-<begin>+<length>      Begin plus <length bytes>, requires <length> > 0
-<begin>               Begin to the end of input
-                            "##,
-                        )
+                        .help(POS_HELP)
                         .takes_value(true)
                         .required(true),
                 ),
@@ -111,15 +119,10 @@ This should be an integer, where -1 specifies then end of the file"##,
             SubCommand::with_name("cut")
                 .about("Cut/extract bytes from file/input")
                 .visible_alias("extract")
+                .after_help(POS_HELP_SEC)
                 .arg(
                     Arg::with_name("position")
-                        .help(
-                            r##"Specify a position/range where a cut shall be performed.
-<begin>:<end>         Begin to end (inclusive), requires <end> > <begin>
-<begin>+<length>      Begin plus <length bytes>, requires <length> > 0
-<begin>               Begin to the end of input
-                            "##,
-                        )
+                        .help(POS_HELP)
                         .takes_value(true)
                         .required(true),
                 ),

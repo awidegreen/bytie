@@ -3,10 +3,15 @@ name = "bytie"
 version = "0.1.0"
 authors = ["Armin Widegreen <bytie@widegreen.net>"]
 edition = "2018"
+license = "BSD-3-Clause"
+license-flie = "LICENSE-BSD3"
+homepage = "https://github.com/awidegreen/bytie"
+description = """bytie allows to add, delete, replace and cut bytes of an input 
+byte stream or from a file from command line."""
 
 [dependencies]
 clap = "2"
-failure = "*"
+failure = "0.1"
 log = "0.4"
 env_logger = "0.7"
 tempfile = "3.1"
@@ -15,3 +20,4 @@ regex = "1"
 lazy_static = "1.4.0"
 rand = "0.7"
 exitcode = "1"
+humanize-rs = "0.1"

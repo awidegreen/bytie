@@ -1,3 +1,4 @@
+use crate::position::Position;
 use clap::{value_t, ArgMatches};
 use failure::{bail, Error};
 use log::debug;
@@ -21,16 +22,13 @@ impl crate::command::Command for CutCommand {
         out: &mut dyn std::io::Write,
         _input: Option<&mut dyn std::io::Read>,
     ) -> Result<(), Error> {
-        let position = crate::utils::parse_position(&self.position)?;
+        let position = self.position.parse::<Position>()?;
         let mut buffer = vec![0; blocksize];
         let mut total_read = 0;
         let mut end = 0;
         let mut cut_till_end = false;
 
         if let Some(pend) = position.end {
-            if pend < 0 {
-                bail!("Unable to handle negative end")
-            }
             end = pend as usize;
             if end < position.begin {
                 bail!("End must be greater than begin")
@@ -110,10 +108,10 @@ mod tests {
 
         for bs in vec![1, 2, 3, 4, 10] {
             for start in 0..=input.len() {
-                for end in start..input.len() {
+                for end in start + 1..input.len() {
                     let exp = &input[start..end + 1];
                     out.clear();
-                    cmd.position = format!("{}:{}", start, end);
+                    cmd.position = format!("{}:={}", start, end);
                     assert!(cmd.run(bs, &mut input.as_bytes(), &mut out, None).is_ok());
                     let out = std::str::from_utf8(&out).unwrap();
                     assert_eq!(exp, out);
@@ -138,10 +136,10 @@ mod tests {
 
         for bs in vec![32, 64, 128, 512, 1024, 2048] {
             for start in 0..=input.len() {
-                for end in start..input.len() {
+                for end in start + 1..input.len() {
                     let exp = &input[start..end + 1];
                     out.clear();
-                    cmd.position = format!("{}:{}", start, end);
+                    cmd.position = format!("{}:={}", start, end);
                     assert!(cmd.run(bs, &mut input.as_bytes(), &mut out, None).is_ok());
                     let out = std::str::from_utf8(&out).unwrap();
                     assert_eq!(exp, out, "bs: {}, start: {}, end: {}", bs, start, end);

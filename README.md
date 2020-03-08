@@ -1,5 +1,8 @@
 # `bytie` - convinient byte stream manipulation
 
+[![crates.io](https://img.shields.io/crates/v/bytie)](https://crates.io/crates/bytie)
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+
 ## Previews
 
 **TODO** Pictues here
@@ -11,6 +14,14 @@ stream or from a file. Surely, one is able to do the same thing with `dd`,
 however I find its command line interface a bit cumbersome at times.
 
 ## Installation
+
+### Via Cargo
+
+Install `bytie` from crates.io.
+
+```sh
+> cargo install bytie
+```
 
 ### Building from source
 
@@ -26,15 +37,6 @@ Build and install via `cargo`. Note that you need a fairly recent rust version.
 > cargo install --path .
 ```
 
-### Via Cargo
-
-**NOTE: NOT YET PUBLISHED**
-
-Install `bytie` from crates.io.
-
-```sh
-> cargo install bytie
-```
 ## Usage
 
 ### Examples
@@ -79,6 +81,9 @@ subcommands:
   `<file>`. This only works if `<file>` has been specified.
 * `<file>` (optional): The input file which will act as a data source for the
   subcommand operation.
+
+All position markers, like the subcommands `begin` or positional parameter (e.g.
+for ranges), accept use human-readable byte format like `1Mb` or `1kib`.
 
 **NOTE:** Based on the specification of the `<file>` parameter, `bytie` will
 decide where the input data originates from. Meaning, if `<file>` is omitted,
@@ -137,9 +142,13 @@ The `cut` and `delete` subcommands require a `position` as an argument. This has
 the following format:
 
 ```
-<begin>:<end>         Begin to end (inclusive) position, requires <end> > <begin>
-<begin>+<length>      Begin plus <length bytes>, requires <length> > 0
-<begin>               Begin to the end of input
+<begin>         Begin to the end of input
+<begin>:<end>   Begin to end (exclusive), requires <end> > <begin>
+                Example: 'foobar', 0:2 == 'fo' or 3:5 == 'ba'
+<begin>:=<end>  Begin to end (inclusive), requires <end> > <begin>
+                Example: 'foobar', 0:=2 == 'foo' or 3:=5 == 'bar'
+<begin>+<count> Begin plus <count> (exclusive), requires <count> > 0.
+                The length includes the begin position: 0+10 is 10 bytes, from 0..9 (same as 0:9)
 ```
 
 ## Possible feature extensions

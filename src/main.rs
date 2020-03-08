@@ -1,14 +1,11 @@
 mod cli;
 mod command;
 mod defs;
-mod utils;
-use clap::ArgMatches;
+mod position;
 
 fn main() {
     env_logger::init();
     let matches = cli::get_matches();
-
-    println!("matches: {:?}", matches);
 
     let runner = command::CommandRunner::from_matches(&matches).unwrap();
 
