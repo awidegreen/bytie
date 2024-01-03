@@ -1,23 +1,30 @@
-use clap::{value_t, ArgMatches};
-use failure::{bail, Error};
-use humanize_rs::bytes::Bytes;
+use anyhow::{anyhow, Error};
+use bytesize::ByteSize;
+use clap::Args;
 
-pub struct ReplaceCommand {
-    begin: usize,
-    value: Option<Vec<u8>>,
+use crate::{range::RANGE_HELP, utils::parse_pos};
+
+fn parse_to_vec(v: &str) -> std::result::Result<Vec<u8>, std::io::Error> {
+    Ok(v.as_bytes().to_vec())
 }
-impl ReplaceCommand {
-    pub fn from_matches(m: &ArgMatches) -> Result<Self, Error> {
-        let begin = value_t!(m, "begin", String)?;
-        let begin = begin.parse::<Bytes>()?.size();
-        let value = if let Ok(value) = value_t!(m, "value", String) {
-            Some(value.as_bytes().to_vec())
-        } else {
-            None
-        };
 
-        Ok(Self { begin, value })
-    }
+#[derive(Args, Debug)]
+#[command(name = "replace", visible_alias = "substitute", after_help = RANGE_HELP)]
+pub(crate) struct ReplaceCommand {
+    /// Specify where the replacement should start.
+    ///
+    /// The value can be integer specifying the byte position.
+    ///
+    /// Instead of providing a number, a human readable byte size string can be
+    /// used, indicating the byte position to start. Example: 3B, 4Kb, 4KiB
+    ///
+    /// If no value is provided, the data will be appended to the input stream.
+    #[arg(value_parser = clap::builder::ValueParser::new(parse_pos))]
+    pub begin: Option<ByteSize>,
+
+    /// Input string that should be added, if not provided STDIN will be used
+    #[arg(short, long, value_parser = clap::builder::ValueParser::new(parse_to_vec))]
+    pub value: Option<Vec<u8>>,
 }
 
 impl crate::command::Command for ReplaceCommand {
@@ -29,7 +36,7 @@ impl crate::command::Command for ReplaceCommand {
         input: Option<&mut dyn std::io::Read>,
     ) -> Result<(), Error> {
         if self.value.is_none() && input.is_none() {
-            bail!("Well, as no <VALUE> input parameter has been provided, some input should be provided by STDIN.")
+            return Err(anyhow!("Well, as no <VALUE> input parameter has been provided, some input should be provided by STDIN."));
         }
 
         let mut buffer = vec![0; blocksize];
@@ -38,21 +45,27 @@ impl crate::command::Command for ReplaceCommand {
         let mut n;
         let mut total_written = 0;
 
+        let begin = if let Some(begin) = self.begin {
+            begin.as_u64() as usize
+        } else {
+            std::usize::MAX
+        };
+
         // read from source until begin position
         loop {
             n = source.read(&mut buffer)?;
             if n == 0 {
                 break;
             }
-            in_total_read = in_total_read + n;
-            if in_total_read > self.begin {
-                offset = self.begin - (in_total_read - n);
-                out.write(&buffer[0..offset])?;
-                total_written = total_written + offset;
+            in_total_read += n;
+            if in_total_read > begin {
+                offset = begin - (in_total_read - n);
+                out.write_all(&buffer[0..offset])?;
+                total_written += offset;
                 break;
             } else {
-                out.write(&buffer[0..n])?;
-                total_written = total_written + n;
+                out.write_all(&buffer[0..n])?;
+                total_written += n;
             }
         }
 
@@ -65,27 +78,27 @@ impl crate::command::Command for ReplaceCommand {
                 if n == 0 {
                     break;
                 }
-                out.write(&b[0..n])?;
-                written = written + n;
+                out.write_all(&b[0..n])?;
+                written += n;
             }
             written
+        } else if let Some(value) = &self.value {
+            out.write_all(value)?;
+            value.len()
         } else {
-            if let Some(ref value) = self.value {
-                out.write(value.as_ref())?;
-                value.len()
-            } else {
-                bail!("No STDIN nor any <VALUE> has been provided, unable to proceed.")
-            }
+            return Err(anyhow!(
+                "No STDIN nor any <VALUE> has been provided, unable to proceed."
+            ));
         };
 
         // if input data (replace with) is shorter than the block that has been
         // read before, make sure the current block is finished before reading
         // next block from source.
         if offset <= n && written < (n - offset) {
-            offset = offset + written;
-            out.write(&buffer[offset..n])?;
+            offset += written;
+            out.write_all(&buffer[offset..n])?;
         }
-        total_written = total_written + written;
+        total_written += written;
 
         if total_written > in_total_read {
             loop {
@@ -93,13 +106,16 @@ impl crate::command::Command for ReplaceCommand {
                 if n == 0 {
                     break;
                 }
-                in_total_read = in_total_read + n;
-                if in_total_read > total_written {
-                    offset = total_written - (in_total_read - n);
-                    out.write(&buffer[offset..n])?;
-                    break;
-                } else if in_total_read == total_written {
-                    break;
+                in_total_read += n;
+
+                match in_total_read.cmp(&total_written) {
+                    std::cmp::Ordering::Greater => {
+                        offset = total_written - (in_total_read - n);
+                        out.write_all(&buffer[offset..n])?;
+                        break;
+                    }
+                    std::cmp::Ordering::Equal => break,
+                    _ => (),
                 }
             }
         }
@@ -108,7 +124,7 @@ impl crate::command::Command for ReplaceCommand {
             if n == 0 {
                 break;
             }
-            out.write(&buffer[0..n])?;
+            out.write_all(&buffer[0..n])?;
         }
 
         out.flush()?;
@@ -125,7 +141,7 @@ mod tests {
     #[test]
     fn test_small_blocksize() {
         let mut cmd = ReplaceCommand {
-            begin: 0,
+            begin: Some(Default::default()),
             value: None,
         };
         let mut out: Vec<u8> = vec![];
@@ -151,7 +167,7 @@ mod tests {
                     exp.extend_from_slice(&input[start + len..]);
                 }
                 out.clear();
-                cmd.begin = start;
+                cmd.begin = Some(ByteSize::b(start as u64));
                 cmd.value = Some(text_to_replace);
                 assert!(cmd.run(bs, &mut input.as_slice(), &mut out, None).is_ok());
                 assert_eq!(exp, out);
@@ -162,7 +178,7 @@ mod tests {
     #[test]
     fn test_big_blocksize() {
         let mut cmd = ReplaceCommand {
-            begin: 0,
+            begin: Some(Default::default()),
             value: None,
         };
         let mut out: Vec<u8> = vec![];
@@ -188,7 +204,7 @@ mod tests {
                     exp.extend_from_slice(&input[start + len..]);
                 }
                 out.clear();
-                cmd.begin = start;
+                cmd.begin = Some(ByteSize::b(start as u64));
                 cmd.value = Some(text_to_replace);
                 assert!(cmd.run(bs, &mut input.as_slice(), &mut out, None).is_ok());
                 assert_eq!(

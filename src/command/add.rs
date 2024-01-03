@@ -1,28 +1,28 @@
-use clap::{value_t, ArgMatches};
-use failure::{bail, Error};
-use humanize_rs::bytes::Bytes;
+use anyhow::{anyhow, Error};
+use bytesize::ByteSize;
+use clap::Args;
 
+use crate::utils::{parse_pos, parse_to_vec};
+
+#[derive(Args, Debug)]
+#[command(visible_alias = "insert")]
 pub struct AddCommand {
-    begin: usize,
-    value: Option<Vec<u8>>,
-}
-impl AddCommand {
-    pub fn from_matches(m: &ArgMatches) -> Result<Self, Error> {
-        let begin = value_t!(m, "begin", String)?;
-        let begin = if begin == "-1" {
-            std::usize::MAX
-        } else {
-            begin.parse::<Bytes>()?.size()
-        };
+    /// Input string that should be added, if not provided STDIN will be used
+    #[arg(short, long, default_value=None, value_parser = parse_to_vec)]
+    // std::vec::Vec is required, see
+    // https://docs.rs/clap/latest/clap/_derive/index.html#arg-types
+    pub value: Option<std::vec::Vec<u8>>,
 
-        let value = if let Ok(value) = value_t!(m, "value", String) {
-            Some(value.as_bytes().to_vec())
-        } else {
-            None
-        };
-
-        Ok(Self { begin, value })
-    }
+    /// Specify where the data should be added.
+    ///
+    /// The value can be integer specifying the byte position.
+    ///
+    /// Instead of providing a number, a human readable byte size string can be
+    /// used, indicating the byte position to start. Example: 3B, 4Kb, 4KiB
+    ///
+    /// If no value is provided, the data will be appended to the input stream.
+    #[arg(value_parser = parse_pos)]
+    pub begin: Option<ByteSize>,
 }
 
 impl crate::command::Command for AddCommand {
@@ -34,7 +34,7 @@ impl crate::command::Command for AddCommand {
         input: Option<&mut dyn std::io::Read>,
     ) -> Result<(), Error> {
         if self.value.is_none() && input.is_none() {
-            bail!("Well, as no <VALUE> input parameter has been provided, some input should be provided by STDIN.")
+            return Err(anyhow!("Well, as no <VALUE> input parameter has been provided, some input should be provided by STDIN."));
         }
 
         let mut buffer = vec![0; blocksize];
@@ -42,18 +42,24 @@ impl crate::command::Command for AddCommand {
         let mut offset = 0;
         let mut n;
 
+        let begin = if let Some(begin) = self.begin {
+            begin.as_u64() as usize
+        } else {
+            std::usize::MAX
+        };
+
         loop {
             n = source.read(&mut buffer)?;
             if n == 0 {
                 break;
             }
-            total_read = total_read + n;
-            if total_read > self.begin {
-                offset = self.begin - (total_read - n);
-                out.write(&buffer[0..offset])?;
+            total_read += n;
+            if total_read > begin {
+                offset = begin - (total_read - n);
+                out.write_all(&buffer[0..offset])?;
                 break;
             } else {
-                out.write(&buffer[0..n])?;
+                out.write_all(&buffer[0..n])?;
             }
         }
 
@@ -64,23 +70,21 @@ impl crate::command::Command for AddCommand {
                 if n == 0 {
                     break;
                 }
-                out.write(&buffer[0..n])?;
+                out.write_all(&buffer[0..n])?;
             }
+        } else if let Some(value) = &self.value {
+            out.write_all(value.as_ref())?;
         } else {
-            if let Some(ref value) = self.value {
-                out.write(value.as_ref())?;
-            } else {
-                bail!("No stdin nor any value has been provided")
-            }
+            return Err(anyhow!("No stdin nor any value has been provided"));
         }
 
         if offset <= n {
-            out.write(&buffer[offset..n])?;
+            out.write_all(&buffer[offset..n])?;
         }
 
         while n != 0 {
             n = source.read(&mut buffer)?;
-            out.write(&buffer[0..n])?;
+            out.write_all(&buffer[0..n])?;
         }
 
         out.flush()?;
@@ -97,7 +101,7 @@ mod tests {
     #[test]
     fn test_add_to_end() {
         let cmd = AddCommand {
-            begin: std::usize::MAX,
+            begin: Some(ByteSize::b(std::u64::MAX)),
             value: Some(vec![3, 4, 5]),
         };
         let input = vec![0, 1, 2];
@@ -113,7 +117,7 @@ mod tests {
     #[test]
     fn test_small_blocksize() {
         let mut cmd = AddCommand {
-            begin: 0,
+            begin: Some(Default::default()),
             value: None,
         };
         let mut out: Vec<u8> = vec![];
@@ -137,7 +141,7 @@ mod tests {
                 exp.extend_from_slice(&text_to_insert);
                 exp.extend_from_slice(&input[start..]);
                 out.clear();
-                cmd.begin = start;
+                cmd.begin = Some(ByteSize::b(start as u64));
                 cmd.value = Some(text_to_insert);
                 assert!(cmd.run(bs, &mut input.as_slice(), &mut out, None).is_ok());
                 assert_eq!(exp, out);
@@ -148,7 +152,7 @@ mod tests {
     #[test]
     fn test_big_blocksize() {
         let mut cmd = AddCommand {
-            begin: 0,
+            begin: Some(ByteSize::b(0)),
             value: None,
         };
         let mut out: Vec<u8> = vec![];
@@ -172,7 +176,7 @@ mod tests {
                 exp.extend_from_slice(&to_insert);
                 exp.extend_from_slice(&input[start..]);
                 out.clear();
-                cmd.begin = start;
+                cmd.begin = Some(ByteSize::b(start as u64));
                 cmd.value = Some(to_insert);
                 assert!(cmd.run(bs, &mut input.as_slice(), &mut out, None).is_ok());
                 assert_eq!(exp, out);

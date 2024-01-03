@@ -1,69 +1,25 @@
 mod cli;
 mod command;
-mod defs;
-mod position;
+mod range;
+mod utils;
 
-fn main() {
+use anyhow::Result;
+use clap::Parser;
+use command::CommandRunner;
+
+fn main() -> Result<()> {
     env_logger::init();
-    let matches = cli::get_matches();
 
-    let runner = command::CommandRunner::from_matches(&matches).unwrap();
+    let mut cli = cli::Cli::parse();
 
-    let exit_code = match matches.subcommand() {
-        ("delete", Some(m)) => match command::delete::DeleteCommand::from_matches(m) {
-            Ok(mut cmd) => match runner.exec(&mut cmd) {
-                Ok(_) => exitcode::OK,
-                Err(x) => {
-                    eprintln!("{}", x);
-                    exitcode::SOFTWARE
-                }
-            },
-            Err(x) => {
-                eprintln!("{}", x);
-                exitcode::USAGE
-            }
-        },
-        ("cut", Some(m)) => match command::cut::CutCommand::from_matches(m) {
-            Ok(mut cmd) => match runner.exec(&mut cmd) {
-                Ok(_) => exitcode::OK,
-                Err(x) => {
-                    eprintln!("{}", x);
-                    exitcode::SOFTWARE
-                }
-            },
-            Err(x) => {
-                eprintln!("{}", x);
-                exitcode::USAGE
-            }
-        },
-        ("add", Some(m)) => match command::add::AddCommand::from_matches(m) {
-            Ok(mut cmd) => match runner.exec(&mut cmd) {
-                Ok(_) => exitcode::OK,
-                Err(x) => {
-                    eprintln!("{}", x);
-                    exitcode::SOFTWARE
-                }
-            },
-            Err(x) => {
-                eprintln!("{}", x);
-                exitcode::USAGE
-            }
-        },
-        ("replace", Some(m)) => match command::replace::ReplaceCommand::from_matches(m) {
-            Ok(mut cmd) => match runner.exec(&mut cmd) {
-                Ok(_) => exitcode::OK,
-                Err(x) => {
-                    eprintln!("{}", x);
-                    exitcode::SOFTWARE
-                }
-            },
-            Err(x) => {
-                eprintln!("{}", x);
-                exitcode::USAGE
-            }
-        },
-        _ => unreachable!(),
+    let runner = CommandRunner {
+        blocksize: cli.blocksize,
+        in_place: cli.in_place,
+        out_file: cli.output,
+        in_file: cli.input,
     };
 
-    std::process::exit(exit_code);
+    runner.exec(&mut cli.cmd)?;
+
+    Ok(())
 }
